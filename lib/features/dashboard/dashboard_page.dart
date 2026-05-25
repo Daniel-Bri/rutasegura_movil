@@ -5,6 +5,7 @@ import 'package:taller_movil/services/auth_service.dart';
 import 'package:taller_movil/services/emergencia_service.dart';
 import 'package:taller_movil/services/api_helper.dart';
 import 'package:taller_movil/shared/app_drawer.dart';
+import 'package:taller_movil/shared/offline_banner.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -121,7 +122,10 @@ class _DashboardPageState extends State<DashboardPage> {
       backgroundColor: AppColors.background,
       appBar: _buildAppBar(),
       drawer: const AppDrawer(),
-      body: SingleChildScrollView(
+      body: Column(
+        children: [
+          const OfflineBanner(),
+          Expanded(child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -174,6 +178,8 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
           ],
         ),
+      )),
+        ],
       ),
     );
   }

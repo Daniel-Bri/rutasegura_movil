@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:taller_movil/core/theme/app_colors.dart';
 import 'package:taller_movil/services/comunicacion_service.dart';
 import 'package:taller_movil/services/taller_service.dart';
+import 'package:taller_movil/services/websocket_service.dart';
 
 // Argumentos de navegación para esta pantalla
 class VerTecnicoMapaArgs {
@@ -35,7 +36,7 @@ class _VerTecnicoMapaPageState extends State<VerTecnicoMapaPage> {
   UbicacionTecnicoModel? _ubicacion;
   bool    _cargando        = true;
   String? _error;
-  Timer?  _timer;
+  StreamSubscription? _wsSub;
 
   int     _asignacionId  = 0;
   LatLng? _incidentePos;
@@ -60,7 +61,7 @@ class _VerTecnicoMapaPageState extends State<VerTecnicoMapaPage> {
       if (args.incidenteLatitud != null && args.incidenteLongitud != null) {
         _incidentePos = LatLng(args.incidenteLatitud!, args.incidenteLongitud!);
       }
-      _iniciarPolling();
+      _iniciarTracking();
     } else {
       // Sin args: buscar la asignación activa del cliente automáticamente
       _cargarAsignacionActiva();
@@ -77,7 +78,7 @@ class _VerTecnicoMapaPageState extends State<VerTecnicoMapaPage> {
       );
       if (!mounted) return;
       _asignacionId = activa.id;
-      _iniciarPolling();
+      _iniciarTracking();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -90,12 +91,37 @@ class _VerTecnicoMapaPageState extends State<VerTecnicoMapaPage> {
     }
   }
 
-  void _iniciarPolling() {
-    _consultar();
-    _timer = Timer.periodic(const Duration(seconds: 4), (_) => _consultar());
+  void _iniciarTracking() {
+    _consultarInicial();
+    _wsSub?.cancel();
+    _wsSub = WebSocketService().on('ubicacion_tecnico').listen((payload) {
+      if (!mounted) return;
+      final asigId = payload['asignacion_id'] as int?;
+      if (asigId != _asignacionId) return;
+      final lat = (payload['latitud'] as num?)?.toDouble();
+      final lon = (payload['longitud'] as num?)?.toDouble();
+      final nombre = payload['nombre'] as String? ?? _ubicacion?.nombre ?? '';
+      if (lat == null || lon == null) return;
+      setState(() {
+        _ubicacion = UbicacionTecnicoModel(
+          tecnicoId: payload['tecnico_id'] as int? ?? _ubicacion?.tecnicoId ?? 0,
+          nombre: nombre,
+          latitud: lat,
+          longitud: lon,
+          ultimaActualizacion: DateTime.now().toIso8601String(),
+          estadoAsignacion: _ubicacion?.estadoAsignacion ?? 'en_camino',
+          eta: _ubicacion?.eta,
+        );
+        _cargando = false;
+        _error = null;
+      });
+      if (_mapaListo) {
+        _mapController.move(LatLng(lat, lon), 15);
+      }
+    });
   }
 
-  Future<void> _consultar() async {
+  Future<void> _consultarInicial() async {
     if (!mounted) return;
     try {
       final ub = await _comunicacionService.obtenerUbicacionTecnico(_asignacionId);
@@ -105,12 +131,8 @@ class _VerTecnicoMapaPageState extends State<VerTecnicoMapaPage> {
         _cargando  = false;
         _error     = null;
       });
-      // Mover solo si el mapa ya fue renderizado (onMapReady disparado)
       if (_mapaListo && ub.latitud != null && ub.longitud != null) {
         _mapController.move(LatLng(ub.latitud!, ub.longitud!), 15);
-      }
-      if (!_estadosActivos.contains(ub.estadoAsignacion)) {
-        _timer?.cancel();
       }
     } catch (e) {
       if (!mounted) return;
@@ -123,7 +145,7 @@ class _VerTecnicoMapaPageState extends State<VerTecnicoMapaPage> {
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _wsSub?.cancel();
     _mapController.dispose();
     super.dispose();
   }
@@ -190,7 +212,7 @@ class _VerTecnicoMapaPageState extends State<VerTecnicoMapaPage> {
             tooltip: 'Actualizar',
             onPressed: () {
               setState(() => _cargando = true);
-              _consultar();
+              _consultarInicial();
             },
           ),
       ],
@@ -293,7 +315,7 @@ class _VerTecnicoMapaPageState extends State<VerTecnicoMapaPage> {
                   _cargando = true;
                   _error    = null;
                 });
-                _iniciarPolling();
+                _iniciarTracking();
               },
               icon: const Icon(Icons.refresh, size: 18),
               label: const Text('Reintentar'),
@@ -521,7 +543,7 @@ class _VerTecnicoMapaPageState extends State<VerTecnicoMapaPage> {
                 const Icon(Icons.sync, size: 13, color: AppColors.grey),
                 const SizedBox(width: 4),
                 const Text(
-                  'Cada 4 s',
+                  'Tiempo real',
                   style: TextStyle(fontSize: 11, color: AppColors.grey),
                 ),
               ],

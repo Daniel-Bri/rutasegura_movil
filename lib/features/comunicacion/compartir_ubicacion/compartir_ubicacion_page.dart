@@ -1,12 +1,7 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:taller_movil/core/theme/app_colors.dart';
-import 'package:taller_movil/services/comunicacion_service.dart';
+import 'package:taller_movil/services/location_sharing_service.dart';
 
-// CU17 — Compartir ubicación (vista del técnico)
-// El técnico activa esta pantalla cuando está "en_camino" para que el
-// cliente pueda ver su posición en tiempo real cada 5 segundos.
 class CompartirUbicacionPage extends StatefulWidget {
   const CompartirUbicacionPage({super.key});
 
@@ -16,76 +11,24 @@ class CompartirUbicacionPage extends StatefulWidget {
 }
 
 class _CompartirUbicacionPageState extends State<CompartirUbicacionPage> {
-  final _service = ComunicacionService();
+  final _svc = LocationSharingService();
 
-  Timer?  _timer;
-  bool    _compartiendo        = false;
-  String? _error;
-  double? _latitud;
-  double? _longitud;
-  String  _ultimaActualizacion = '--';
-  int     _envios              = 0;
+  @override
+  void initState() {
+    super.initState();
+    _svc.addListener(_onUpdate);
+  }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _svc.removeListener(_onUpdate);
     super.dispose();
   }
 
-  Future<void> _iniciarCompartir() async {
-    LocationPermission permiso = await Geolocator.checkPermission();
-    if (permiso == LocationPermission.denied) {
-      permiso = await Geolocator.requestPermission();
-    }
-    if (permiso == LocationPermission.denied ||
-        permiso == LocationPermission.deniedForever) {
-      setState(() =>
-          _error = 'Permiso de ubicación denegado. Habilítalo en Ajustes.');
-      return;
-    }
-
-    setState(() {
-      _compartiendo = true;
-      _error        = null;
-    });
-    await _enviarUbicacion();
-    _timer =
-        Timer.periodic(const Duration(seconds: 5), (_) => _enviarUbicacion());
+  void _onUpdate() {
+    if (mounted) setState(() {});
   }
 
-  void _detenerCompartir() {
-    _timer?.cancel();
-    setState(() => _compartiendo = false);
-  }
-
-  Future<void> _enviarUbicacion() async {
-    if (!mounted) return;
-    try {
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings:
-            const LocationSettings(accuracy: LocationAccuracy.high),
-      );
-      await _service.actualizarMiUbicacion(
-        latitud: pos.latitude,
-        longitud: pos.longitude,
-      );
-      if (!mounted) return;
-      final now = TimeOfDay.now();
-      setState(() {
-        _latitud             = pos.latitude;
-        _longitud            = pos.longitude;
-        _ultimaActualizacion =
-            '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
-        _envios++;
-        _error = null;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
-    }
-  }
-
-  // ── Build ────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -96,26 +39,19 @@ class _CompartirUbicacionPageState extends State<CompartirUbicacionPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Cabecera
             const Text(
               'Compartir Ubicación',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: AppColors.text,
-              ),
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.text),
             ),
             const SizedBox(height: 4),
             Text(
-              _compartiendo
+              _svc.compartiendo
                   ? 'Tu ubicación se está enviando al cliente'
                   : 'Activa para que el cliente te vea en el mapa',
               style: const TextStyle(fontSize: 13, color: AppColors.grey),
             ),
-
             const SizedBox(height: 28),
 
-            // Tarjeta de estado
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 28),
@@ -123,9 +59,7 @@ class _CompartirUbicacionPageState extends State<CompartirUbicacionPage> {
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: _compartiendo
-                      ? const Color(0xFFBBF7D0)
-                      : const Color(0xFFF3F4F6),
+                  color: _svc.compartiendo ? const Color(0xFFBBF7D0) : const Color(0xFFF3F4F6),
                 ),
                 boxShadow: [
                   BoxShadow(
@@ -138,46 +72,37 @@ class _CompartirUbicacionPageState extends State<CompartirUbicacionPage> {
               child: Column(
                 children: [
                   Container(
-                    width: 80,
-                    height: 80,
+                    width: 80, height: 80,
                     decoration: BoxDecoration(
-                      color: _compartiendo
-                          ? const Color(0xFFECFDF5)
-                          : const Color(0xFFF3F4F6),
+                      color: _svc.compartiendo ? const Color(0xFFECFDF5) : const Color(0xFFF3F4F6),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
-                      _compartiendo
-                          ? Icons.location_on
-                          : Icons.location_off_outlined,
+                      _svc.compartiendo ? Icons.location_on : Icons.location_off_outlined,
                       size: 40,
-                      color: _compartiendo ? AppColors.success : AppColors.grey,
+                      color: _svc.compartiendo ? AppColors.success : AppColors.grey,
                     ),
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    _compartiendo ? 'Compartiendo' : 'Inactivo',
+                    _svc.compartiendo ? 'Compartiendo' : 'Inactivo',
                     style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: _compartiendo ? AppColors.success : AppColors.grey,
+                      fontSize: 18, fontWeight: FontWeight.w700,
+                      color: _svc.compartiendo ? AppColors.success : AppColors.grey,
                     ),
                   ),
-                  if (_latitud != null) ...[
+                  if (_svc.latitud != null) ...[
                     const SizedBox(height: 6),
                     Text(
-                      '${_latitud!.toStringAsFixed(5)}, '
-                      '${_longitud!.toStringAsFixed(5)}',
-                      style: const TextStyle(
-                          fontSize: 11, color: AppColors.grey),
+                      '${_svc.latitud!.toStringAsFixed(5)}, ${_svc.longitud!.toStringAsFixed(5)}',
+                      style: const TextStyle(fontSize: 11, color: AppColors.grey),
                     ),
                   ],
-                  if (_envios > 0) ...[
+                  if (_svc.envios > 0) ...[
                     const SizedBox(height: 4),
                     Text(
-                      '$_envios ${_envios == 1 ? 'envío' : 'envíos'} realizados',
-                      style: const TextStyle(
-                          fontSize: 11, color: AppColors.grey),
+                      '${_svc.envios} ${_svc.envios == 1 ? 'envío' : 'envíos'} realizados',
+                      style: const TextStyle(fontSize: 11, color: AppColors.grey),
                     ),
                   ],
                 ],
@@ -186,24 +111,16 @@ class _CompartirUbicacionPageState extends State<CompartirUbicacionPage> {
 
             const SizedBox(height: 16),
 
-            // Filas informativas
-            if (_compartiendo) ...[
-              _InfoRow(
-                Icons.sync,
-                'Actualización automática',
-                'Cada 5 segundos',
-              ),
+            if (_svc.compartiendo) ...[
+              _InfoRow(Icons.sync, 'Actualización automática', 'Cada 5 segundos'),
               const SizedBox(height: 10),
-              _InfoRow(
-                Icons.access_time_outlined,
-                'Último envío',
-                _ultimaActualizacion,
-              ),
+              _InfoRow(Icons.access_time_outlined, 'Último envío', _svc.ultimaActualizacion),
+              const SizedBox(height: 10),
+              _InfoRow(Icons.info_outline, 'Modo', 'Sigue activo al salir de esta pantalla'),
               const SizedBox(height: 20),
             ],
 
-            // Error
-            if (_error != null)
+            if (_svc.error != null)
               Container(
                 margin: const EdgeInsets.only(bottom: 16),
                 padding: const EdgeInsets.all(12),
@@ -213,46 +130,30 @@ class _CompartirUbicacionPageState extends State<CompartirUbicacionPage> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.error_outline,
-                        color: AppColors.danger, size: 18),
+                    const Icon(Icons.error_outline, color: AppColors.danger, size: 18),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
-                        _error!,
-                        style: const TextStyle(
-                            fontSize: 12, color: AppColors.danger),
-                      ),
+                      child: Text(_svc.error!, style: const TextStyle(fontSize: 12, color: AppColors.danger)),
                     ),
                   ],
                 ),
               ),
 
-            // Botón principal
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed:
-                    _compartiendo ? _detenerCompartir : _iniciarCompartir,
+                onPressed: _svc.compartiendo ? _svc.detener : () => _svc.iniciar(),
                 icon: Icon(
-                  _compartiendo
-                      ? Icons.stop_circle_outlined
-                      : Icons.play_circle_outlined,
+                  _svc.compartiendo ? Icons.stop_circle_outlined : Icons.play_circle_outlined,
                   size: 20,
                 ),
-                label: Text(
-                  _compartiendo
-                      ? 'Detener compartición'
-                      : 'Iniciar compartición',
-                ),
+                label: Text(_svc.compartiendo ? 'Detener compartición' : 'Iniciar compartición'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor:
-                      _compartiendo ? AppColors.danger : AppColors.success,
+                  backgroundColor: _svc.compartiendo ? AppColors.danger : AppColors.success,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  textStyle: const TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w600),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                 ),
               ),
             ),
@@ -279,8 +180,7 @@ class _CompartirUbicacionPageState extends State<CompartirUbicacionPage> {
       title: Row(
         children: [
           Container(
-            width: 28,
-            height: 28,
+            width: 28, height: 28,
             decoration: BoxDecoration(
               color: AppColors.success,
               borderRadius: BorderRadius.circular(6),
@@ -288,21 +188,14 @@ class _CompartirUbicacionPageState extends State<CompartirUbicacionPage> {
             child: const Icon(Icons.location_on, color: Colors.white, size: 16),
           ),
           const SizedBox(width: 8),
-          const Text(
-            'Mi Ubicación',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 15,
-              color: AppColors.text,
-            ),
-          ),
+          const Text('Mi Ubicación',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: AppColors.text)),
         ],
       ),
     );
   }
 }
 
-// ── Widget auxiliar ───────────────────────────────────────────
 class _InfoRow extends StatelessWidget {
   const _InfoRow(this.icon, this.label, this.value);
   final IconData icon;
@@ -321,14 +214,9 @@ class _InfoRow extends StatelessWidget {
         children: [
           Icon(icon, size: 18, color: AppColors.primary),
           const SizedBox(width: 12),
-          Text(label,
-              style: const TextStyle(fontSize: 13, color: AppColors.grey)),
+          Text(label, style: const TextStyle(fontSize: 13, color: AppColors.grey)),
           const Spacer(),
-          Text(value,
-              style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.text)),
+          Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.text)),
         ],
       ),
     );
