@@ -29,6 +29,7 @@ import 'package:taller_movil/features/solicitudes/ver_solicitudes_disponibles/ve
 import 'package:taller_movil/features/solicitudes/ver_detalle_incidente/ver_detalle_incidente_page.dart';
 import 'package:taller_movil/features/solicitudes/aceptar_solicitud/aceptar_solicitud_page.dart';
 import 'package:taller_movil/features/solicitudes/rechazar_solicitud/rechazar_solicitud_page.dart';
+import 'package:taller_movil/features/solicitudes/verificar_llegada/verificar_llegada_page.dart';
 
 // Talleres y Técnicos
 import 'package:taller_movil/features/talleres_tecnicos/gestionar_tecnicos/gestionar_tecnicos_page.dart';
@@ -105,8 +106,9 @@ class RutaSegura extends StatelessWidget {
         '/solicitudes/cancelar':     (_) => const CancelarSolicitudPage(),
         '/solicitudes/disponibles':  (_) => const VerSolicitudesDisponiblesPage(),
         '/solicitudes/detalle':      (_) => const VerDetalleIncidentePage(),
-        '/solicitudes/aceptar':      (_) => const AceptarSolicitudPage(),
-        '/solicitudes/rechazar':     (_) => const RechazarSolicitudPage(),
+        '/solicitudes/aceptar':          (_) => const AceptarSolicitudPage(),
+        '/solicitudes/rechazar':         (_) => const RechazarSolicitudPage(),
+        '/solicitudes/verificar-llegada': (_) => const VerificarLlegadaPage(),
 
         // ── Talleres y Técnicos ───────────────────────────
         '/talleres/gestionar-tecnicos':  (_) => const GestionarTecnicosPage(),
