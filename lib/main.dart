@@ -32,6 +32,7 @@ import 'package:taller_movil/features/solicitudes/ver_solicitudes_disponibles/ve
 import 'package:taller_movil/features/solicitudes/ver_detalle_incidente/ver_detalle_incidente_page.dart';
 import 'package:taller_movil/features/solicitudes/aceptar_solicitud/aceptar_solicitud_page.dart';
 import 'package:taller_movil/features/solicitudes/rechazar_solicitud/rechazar_solicitud_page.dart';
+import 'package:taller_movil/features/solicitudes/verificar_llegada/verificar_llegada_page.dart';
 
 // Talleres y Técnicos
 import 'package:taller_movil/features/talleres_tecnicos/gestionar_tecnicos/gestionar_tecnicos_page.dart';
@@ -60,23 +61,80 @@ import 'package:taller_movil/features/reportes/metricas_taller/metricas_taller_p
 import 'package:taller_movil/features/reportes/metricas_globales/metricas_globales_page.dart';
 import 'package:taller_movil/features/reportes/auditoria/auditoria_page.dart';
 
+import 'dart:async';
+import 'package:taller_movil/services/websocket_service.dart';
+import 'package:taller_movil/services/offline_queue_service.dart';
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
-    // Si Firebase no está configurado en este build/dispositivo,
-    // no bloqueamos el arranque de la app.
     await Firebase.initializeApp();
   } catch (_) {}
   runApp(const RutaSegura());
 }
 
-class RutaSegura extends StatelessWidget {
+class RutaSegura extends StatefulWidget {
   const RutaSegura({super.key});
+
+  @override
+  State<RutaSegura> createState() => _RutaSeguraState();
+}
+
+class _RutaSeguraState extends State<RutaSegura> {
+  StreamSubscription? _notifSub;
+  StreamSubscription? _msgSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _notifSub = WebSocketService().on('notificacion').listen((payload) {
+      _showSnack(
+        payload['titulo'] as String? ?? 'Notificación',
+        payload['mensaje'] as String? ?? '',
+      );
+    });
+    _msgSub = WebSocketService().on('nuevo_mensaje').listen((payload) {
+      final remitente = payload['remitente'] as String? ?? 'Nuevo mensaje';
+      final contenido = payload['contenido'] as String? ?? '';
+      _showSnack('Mensaje de $remitente', contenido);
+    });
+  }
+
+  void _showSnack(String titulo, String mensaje) {
+    final ctx = navigatorKey.currentContext;
+    if (ctx == null) return;
+    ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+      behavior: SnackBarBehavior.floating,
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      backgroundColor: const Color(0xFF1E3A8A),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      duration: const Duration(seconds: 4),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(titulo, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Colors.white)),
+          if (mensaje.isNotEmpty)
+            Text(mensaje, style: const TextStyle(fontSize: 12, color: Color(0xFFBFDBFE)), maxLines: 2, overflow: TextOverflow.ellipsis),
+        ],
+      ),
+    ));
+  }
+
+  @override
+  void dispose() {
+    _notifSub?.cancel();
+    _msgSub?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'RutaSegura',
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: AppColors.primary),
@@ -114,8 +172,9 @@ class RutaSegura extends StatelessWidget {
         '/solicitudes/cancelar':     (_) => const CancelarSolicitudPage(),
         '/solicitudes/disponibles':  (_) => const VerSolicitudesDisponiblesPage(),
         '/solicitudes/detalle':      (_) => const VerDetalleIncidentePage(),
-        '/solicitudes/aceptar':      (_) => const AceptarSolicitudPage(),
-        '/solicitudes/rechazar':     (_) => const RechazarSolicitudPage(),
+        '/solicitudes/aceptar':          (_) => const AceptarSolicitudPage(),
+        '/solicitudes/rechazar':         (_) => const RechazarSolicitudPage(),
+        '/solicitudes/verificar-llegada': (_) => const VerificarLlegadaPage(),
 
         // ── Talleres y Técnicos ───────────────────────────
         '/talleres/gestionar-tecnicos':  (_) => const GestionarTecnicosPage(),
@@ -172,11 +231,16 @@ class _SplashRouterState extends State<_SplashRouter> {
             ),
           );
         }
-        if (snapshot.data == true && !_pushInitDone) {
-          _pushInitDone = true;
-          NotificacionService().inicializar(context).ignore();
+        if (snapshot.data!) {
+          if (!_pushInitDone) {
+            _pushInitDone = true;
+            NotificacionService().inicializar(context).ignore();
+          }
+          WebSocketService().conectar();
+          OfflineQueueService().init().then((_) => OfflineQueueService().sincronizar());
+          return const DashboardPage();
         }
-        return snapshot.data! ? const DashboardPage() : const IniciarSesionPage();
+        return const IniciarSesionPage();
       },
     );
   }

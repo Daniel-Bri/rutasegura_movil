@@ -5,6 +5,7 @@ import 'package:taller_movil/services/api_helper.dart';
 import 'package:taller_movil/services/auth_service.dart';
 import 'package:taller_movil/services/comunicacion_service.dart';
 import 'package:taller_movil/services/taller_service.dart';
+import 'package:taller_movil/services/websocket_service.dart';
 
 class ChatArgs {
   final int asignacionId;
@@ -41,7 +42,7 @@ class _ChatPageState extends State<ChatPage> {
   bool _cargando = true;
   bool _enviando = false;
   String? _error;
-  Timer? _timer;
+  StreamSubscription? _wsSub;
 
   @override
   void initState() {
@@ -121,8 +122,16 @@ class _ChatPageState extends State<ChatPage> {
   Future<void> _initChat() async {
     if (_args == null) return;
     await _cargarMensajes();
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 3), (_) => _pollMensajes());
+    _wsSub?.cancel();
+    _wsSub = WebSocketService().on('nuevo_mensaje').listen((payload) {
+      if (!mounted || _args == null) return;
+      final asigId = payload['asignacion_id'] as int?;
+      if (asigId != _args!.asignacionId) return;
+      final msg = MensajeModel.fromJson(payload);
+      if (_mensajes.any((m) => m.id == msg.id)) return;
+      setState(() => _mensajes = [..._mensajes, msg]);
+      _scrollAlFinal();
+    });
   }
 
   Future<void> _cargarMensajes() async {
@@ -136,17 +145,6 @@ class _ChatPageState extends State<ChatPage> {
     } catch (e) {
       if (mounted) setState(() { _cargando = false; _error = e.toString(); });
     }
-  }
-
-  Future<void> _pollMensajes() async {
-    if (_args == null || !mounted) return;
-    try {
-      final msgs = await _svc.listarMensajes(_args!.asignacionId);
-      if (mounted && msgs.length != _mensajes.length) {
-        setState(() => _mensajes = msgs);
-        _scrollAlFinal();
-      }
-    } catch (_) {}
   }
 
   Future<void> _enviar() async {
@@ -169,7 +167,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   void _volverALista() {
-    _timer?.cancel();
+    _wsSub?.cancel();
     setState(() {
       _args = null;
       _mensajes = [];
@@ -193,7 +191,7 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _wsSub?.cancel();
     _inputCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
