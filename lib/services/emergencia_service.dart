@@ -268,4 +268,22 @@ class EmergenciaService {
     if (res.statusCode == 401 || res.statusCode == 403) throw TokenExpiradoException();
     throw Exception('Error al cargar cotizaciones (${res.statusCode})');
   }
+
+  /// CU20 – Aceptar o rechazar una cotización (cliente).
+  Future<void> responderCotizacion({
+    required int cotizacionId,
+    required String estado, // "aceptada" | "rechazada"
+  }) async {
+    final res = await http.patch(
+      Uri.parse('${AppConfig.baseUrl}/api/pagos/cotizaciones/$cotizacionId/estado'),
+      headers: await _authHeaders(),
+      body: jsonEncode({'estado': estado}),
+    );
+    if (res.statusCode == 200) return;
+    if (res.statusCode == 401 || res.statusCode == 403) throw TokenExpiradoException();
+    final detail = res.body.isNotEmpty
+        ? (jsonDecode(res.body) as Map<String, dynamic>)['detail']
+        : null;
+    throw Exception(detail ?? 'Error al responder cotización (${res.statusCode})');
+  }
 }

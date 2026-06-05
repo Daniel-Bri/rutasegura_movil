@@ -20,9 +20,10 @@ class _RegistrarVehiculoPageState extends State<RegistrarVehiculoPage> {
   final _formKey = GlobalKey<FormState>();
   final _service  = VehiculoService();
 
-  final _placaCtrl  = TextEditingController();
-  final _modeloCtrl = TextEditingController();
-  final _anioCtrl   = TextEditingController();
+  final _placaCtrl   = TextEditingController();
+  final _modeloCtrl  = TextEditingController();
+  final _anioCtrl    = TextEditingController();
+  final _seguroCtrl  = TextEditingController();
 
   String? _marca;
   String? _color;
@@ -45,6 +46,7 @@ class _RegistrarVehiculoPageState extends State<RegistrarVehiculoPage> {
     _placaCtrl.dispose();
     _modeloCtrl.dispose();
     _anioCtrl.dispose();
+    _seguroCtrl.dispose();
     super.dispose();
   }
 
@@ -54,11 +56,12 @@ class _RegistrarVehiculoPageState extends State<RegistrarVehiculoPage> {
 
     try {
       await _service.registrarVehiculo(
-        placa:  _placaCtrl.text.trim().toUpperCase(),
-        marca:  _marca!,
-        modelo: _modeloCtrl.text.trim(),
-        anio:   int.parse(_anioCtrl.text.trim()),
-        color:  _color!,
+        placa:         _placaCtrl.text.trim().toUpperCase(),
+        marca:         _marca!,
+        modelo:        _modeloCtrl.text.trim(),
+        anio:          int.parse(_anioCtrl.text.trim()),
+        color:         _color!,
+        numeroSeguro:  _seguroCtrl.text.trim().isEmpty ? null : _seguroCtrl.text.trim(),
       );
       setState(() { _success = true; _loading = false; });
     } catch (e) {
@@ -163,6 +166,13 @@ class _RegistrarVehiculoPageState extends State<RegistrarVehiculoPage> {
                   items: _colores,
                   onChanged: (v) => setState(() => _color = v),
                   validator: (v) => v == null ? 'Selecciona un color' : null,
+                ),
+                const SizedBox(height: 16),
+                _Field(
+                  label: 'Número de seguro (opcional)',
+                  controller: _seguroCtrl,
+                  hint: 'Póliza o número de seguro vehicular',
+                  validator: (_) => null,
                 ),
                 if (_error.isNotEmpty) ...[
                   const SizedBox(height: 16),

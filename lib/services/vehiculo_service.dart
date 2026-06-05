@@ -23,6 +23,7 @@ class VehiculoService {
     required String modelo,
     required int anio,
     required String color,
+    String? numeroSeguro,
   }) async {
     final res = await http.post(
       Uri.parse('$_baseUrl/vehiculos'),
@@ -33,6 +34,7 @@ class VehiculoService {
         'modelo': modelo,
         'anio': anio,
         'color': color,
+        if (numeroSeguro != null && numeroSeguro.isNotEmpty) 'numero_seguro': numeroSeguro,
       }),
     );
     verificarRespuesta(res, esperado: 201);

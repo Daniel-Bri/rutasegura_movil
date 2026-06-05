@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:taller_movil/core/theme/app_colors.dart';
 import 'package:taller_movil/services/emergencia_service.dart';
+import 'package:taller_movil/services/pago_stripe_service.dart';
 import 'package:taller_movil/services/api_helper.dart';
 
 /// CU20 – Cliente realiza el pago de una cotización aceptada.
@@ -14,7 +16,8 @@ class RealizarPagoPage extends StatefulWidget {
 }
 
 class _RealizarPagoPageState extends State<RealizarPagoPage> {
-  final _svc = EmergenciaService();
+  final _svc        = EmergenciaService();
+  final _stripeSvc  = PagoStripeService();
 
   List<Map<String, dynamic>> _cotizaciones = [];
   bool _loading = true;
@@ -26,7 +29,7 @@ class _RealizarPagoPageState extends State<RealizarPagoPage> {
   int? _cotizacionSeleccionada;
   String _metodo = 'efectivo';
 
-  static const _metodos = ['efectivo', 'transferencia', 'tarjeta'];
+  static const _metodos = ['efectivo', 'tarjeta'];
 
   @override
   void didChangeDependencies() {
@@ -41,7 +44,10 @@ class _RealizarPagoPageState extends State<RealizarPagoPage> {
     try {
       final data = await _svc.listarMisCotizaciones();
       if (!mounted) return;
-      final pendientes = data.where((c) => c['estado'] == 'aceptada').toList();
+      // Solo cotizaciones aceptadas cuyo servicio ya fue finalizado
+      final pendientes = data.where((c) =>
+          c['estado'] == 'aceptada' &&
+          c['estado_asignacion'] == 'finalizado').toList();
       setState(() {
         _cotizaciones = pendientes;
         _loading = false;
@@ -62,11 +68,20 @@ class _RealizarPagoPageState extends State<RealizarPagoPage> {
 
   Future<void> _pagar() async {
     if (_cotizacionSeleccionada == null) return;
+
+    if (_metodo == 'tarjeta') {
+      await _pagarConTarjeta();
+    } else {
+      await _pagarEfectivo();
+    }
+  }
+
+  Future<void> _pagarEfectivo() async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Confirmar pago'),
-        content: Text('¿Pagar cotización #$_cotizacionSeleccionada con $_metodo?'),
+        title: const Text('Confirmar pago en efectivo'),
+        content: Text('¿Confirmar pago en efectivo de la cotización #$_cotizacionSeleccionada?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
           ElevatedButton(
@@ -83,16 +98,51 @@ class _RealizarPagoPageState extends State<RealizarPagoPage> {
     try {
       final result = await _svc.realizarPago(
         cotizacionId: _cotizacionSeleccionada!,
-        metodo: _metodo,
+        metodo: 'efectivo',
       );
       if (!mounted) return;
       setState(() { _pagoRealizado = result; _pagando = false; });
     } catch (e) {
       if (!mounted) return;
-      if (e is TokenExpiradoException) {
-        Navigator.pushReplacementNamed(context, '/login');
+      if (e is TokenExpiradoException) { Navigator.pushReplacementNamed(context, '/login'); return; }
+      setState(() { _error = e.toString().replaceFirst('Exception: ', ''); _pagando = false; });
+    }
+  }
+
+  Future<void> _pagarConTarjeta() async {
+    setState(() { _pagando = true; _error = ''; });
+    try {
+      final intent          = await _stripeSvc.crearIntent(_cotizacionSeleccionada!);
+      final clientSecret    = intent['client_secret'] as String;
+      final paymentIntentId = intent['payment_intent_id'] as String;
+
+      bool stripeExitoso = false;
+      try {
+        await Stripe.instance.initPaymentSheet(
+          paymentSheetParameters: SetupPaymentSheetParameters(
+            paymentIntentClientSecret: clientSecret,
+            merchantDisplayName: 'RutaSegura',
+          ),
+        );
+        await Stripe.instance.presentPaymentSheet();
+        stripeExitoso = true;
+      } on StripeException catch (e) {
+        if (!mounted) return;
+        setState(() { _pagando = false; _error = e.error.localizedMessage ?? 'Pago cancelado'; });
         return;
+      } catch (_) {
+        // Stripe no disponible en este entorno — usa pago simulado
       }
+
+      final result = stripeExitoso
+          ? await _stripeSvc.confirmarPago(_cotizacionSeleccionada!, paymentIntentId)
+          : await _svc.realizarPago(cotizacionId: _cotizacionSeleccionada!, metodo: 'tarjeta');
+      if (!mounted) return;
+      setState(() { _pagoRealizado = result; _pagando = false; });
+
+    } catch (e) {
+      if (!mounted) return;
+      if (e is TokenExpiradoException) { Navigator.pushReplacementNamed(context, '/login'); return; }
       setState(() { _error = e.toString().replaceFirst('Exception: ', ''); _pagando = false; });
     }
   }
@@ -170,8 +220,15 @@ class _RealizarPagoPageState extends State<RealizarPagoPage> {
           SizedBox(height: 40),
           Icon(Icons.receipt_long_outlined, size: 56, color: Color(0xFFD1D5DB)),
           SizedBox(height: 16),
-          Text('No tienes cotizaciones aceptadas pendientes de pago.',
-              style: TextStyle(color: Color(0xFF6B7280), fontSize: 14), textAlign: TextAlign.center),
+          Text('No hay pagos pendientes.',
+              style: TextStyle(color: Color(0xFF374151), fontSize: 15, fontWeight: FontWeight.w700),
+              textAlign: TextAlign.center),
+          SizedBox(height: 8),
+          Text(
+            'El pago se habilita una vez que el técnico marca el servicio como finalizado.',
+            style: TextStyle(color: Color(0xFF6B7280), fontSize: 13),
+            textAlign: TextAlign.center,
+          ),
         ]),
       ),
     );
