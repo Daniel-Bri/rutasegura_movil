@@ -294,91 +294,74 @@ class _PagoBottomSheet extends StatefulWidget {
 }
 
 class _PagoBottomSheetState extends State<_PagoBottomSheet> {
-  final _svc = EmergenciaService();
+  final _svc      = EmergenciaService();
   final _stripeSvc = PagoStripeService();
-  bool _cargando = false;
+  // Estado por botón para que el spinner aparezca solo en el botón pulsado
+  bool _cargandoEfectivo = false;
+  bool _cargandoTarjeta  = false;
   String _error = '';
 
+  bool get _cualquieraCargando => _cargandoEfectivo || _cargandoTarjeta;
+
   Future<void> _pagarTarjeta() async {
-    setState(() { _cargando = true; _error = ''; });
+    setState(() { _cargandoTarjeta = true; _error = ''; });
     try {
-      final intent = await _stripeSvc.crearIntent(widget.cotizacionId);
-      final clientSecret = intent['client_secret'] as String;
+      final intent          = await _stripeSvc.crearIntent(widget.cotizacionId);
+      final clientSecret    = intent['client_secret'] as String;
       final paymentIntentId = intent['payment_intent_id'] as String;
 
-      bool stripeExitoso = false;
-      try {
-        await Stripe.instance.initPaymentSheet(
-          paymentSheetParameters: SetupPaymentSheetParameters(
-            paymentIntentClientSecret: clientSecret,
-            merchantDisplayName: 'RutaSegura',
-          ),
-        );
-        await Stripe.instance.presentPaymentSheet();
-        stripeExitoso = true;
-      } on StripeException catch (e) {
-        if (!mounted) return;
-        setState(() { _cargando = false; _error = e.error.localizedMessage ?? 'Pago cancelado'; });
-        return;
-      } catch (_) {
-        // Stripe no disponible en este entorno — usa pago simulado
-      }
-
-      if (stripeExitoso) {
-        await _stripeSvc.confirmarPago(widget.cotizacionId, paymentIntentId);
-      } else {
-        await _svc.realizarPago(cotizacionId: widget.cotizacionId, metodo: 'tarjeta');
-      }
+      await Stripe.instance.initPaymentSheet(
+        paymentSheetParameters: SetupPaymentSheetParameters(
+          paymentIntentClientSecret: clientSecret,
+          merchantDisplayName: 'RutaSegura',
+          style: ThemeMode.light,
+        ),
+      );
+      await Stripe.instance.presentPaymentSheet();
+      await _stripeSvc.confirmarPago(widget.cotizacionId, paymentIntentId);
 
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: const Color(0xFF16A34A),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          content: const Text('Pago con tarjeta completado',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-        ),
-      );
+      ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: const Color(0xFF16A34A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        content: const Text('Pago con tarjeta completado',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+      ));
+    } on StripeException catch (e) {
+      if (!mounted) return;
+      setState(() { _cargandoTarjeta = false; _error = e.error.localizedMessage ?? 'Pago cancelado'; });
     } on TokenExpiradoException {
       if (!mounted) return;
       Navigator.pop(context);
       Navigator.pushReplacementNamed(navigatorKey.currentContext!, '/login');
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _cargando = false;
-        _error = e.toString().replaceFirst('Exception: ', '');
-      });
+      setState(() { _cargandoTarjeta = false; _error = e.toString().replaceFirst('Exception: ', ''); });
     }
   }
 
   Future<void> _pagarEfectivo() async {
-    setState(() { _cargando = true; _error = ''; });
+    setState(() { _cargandoEfectivo = true; _error = ''; });
     try {
       await _svc.realizarPago(cotizacionId: widget.cotizacionId, metodo: 'efectivo');
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: const Color(0xFF16A34A),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          content: const Text('Pago registrado correctamente',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-        ),
-      );
+      ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: const Color(0xFF16A34A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        content: const Text('Pago registrado correctamente',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+      ));
     } on TokenExpiradoException {
       if (!mounted) return;
       Navigator.pop(context);
       Navigator.pushReplacementNamed(navigatorKey.currentContext!, '/login');
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _cargando = false;
-        _error = e.toString().replaceFirst('Exception: ', '');
-      });
+      setState(() { _cargandoEfectivo = false; _error = e.toString().replaceFirst('Exception: ', ''); });
     }
   }
 
@@ -439,8 +422,8 @@ class _PagoBottomSheetState extends State<_PagoBottomSheet> {
           Row(children: [
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: _cargando ? null : _pagarEfectivo,
-                icon: _cargando
+                onPressed: _cualquieraCargando ? null : _pagarEfectivo,
+                icon: _cargandoEfectivo
                     ? const SizedBox(width: 18, height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Icon(Icons.payments_outlined),
@@ -456,8 +439,11 @@ class _PagoBottomSheetState extends State<_PagoBottomSheet> {
             const SizedBox(width: 12),
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: _cargando ? null : _pagarTarjeta,
-                icon: const Icon(Icons.credit_card_outlined),
+                onPressed: _cualquieraCargando ? null : _pagarTarjeta,
+                icon: _cargandoTarjeta
+                    ? const SizedBox(width: 18, height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.credit_card_outlined),
                 label: const Text('Tarjeta',
                     style: TextStyle(fontWeight: FontWeight.w700)),
                 style: ElevatedButton.styleFrom(

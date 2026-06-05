@@ -116,30 +116,22 @@ class _RealizarPagoPageState extends State<RealizarPagoPage> {
       final clientSecret    = intent['client_secret'] as String;
       final paymentIntentId = intent['payment_intent_id'] as String;
 
-      bool stripeExitoso = false;
-      try {
-        await Stripe.instance.initPaymentSheet(
-          paymentSheetParameters: SetupPaymentSheetParameters(
-            paymentIntentClientSecret: clientSecret,
-            merchantDisplayName: 'RutaSegura',
-          ),
-        );
-        await Stripe.instance.presentPaymentSheet();
-        stripeExitoso = true;
-      } on StripeException catch (e) {
-        if (!mounted) return;
-        setState(() { _pagando = false; _error = e.error.localizedMessage ?? 'Pago cancelado'; });
-        return;
-      } catch (_) {
-        // Stripe no disponible en este entorno — usa pago simulado
-      }
+      await Stripe.instance.initPaymentSheet(
+        paymentSheetParameters: SetupPaymentSheetParameters(
+          paymentIntentClientSecret: clientSecret,
+          merchantDisplayName: 'RutaSegura',
+          style: ThemeMode.light,
+        ),
+      );
+      await Stripe.instance.presentPaymentSheet();
 
-      final result = stripeExitoso
-          ? await _stripeSvc.confirmarPago(_cotizacionSeleccionada!, paymentIntentId)
-          : await _svc.realizarPago(cotizacionId: _cotizacionSeleccionada!, metodo: 'tarjeta');
+      final result = await _stripeSvc.confirmarPago(_cotizacionSeleccionada!, paymentIntentId);
       if (!mounted) return;
       setState(() { _pagoRealizado = result; _pagando = false; });
 
+    } on StripeException catch (e) {
+      if (!mounted) return;
+      setState(() { _pagando = false; _error = e.error.localizedMessage ?? 'Pago cancelado o fallido'; });
     } catch (e) {
       if (!mounted) return;
       if (e is TokenExpiradoException) { Navigator.pushReplacementNamed(context, '/login'); return; }
