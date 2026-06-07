@@ -210,6 +210,33 @@ class _CotizacionCard extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
+              // Taller info (CU39 + CU43)
+              if (cot['taller_nombre'] != null) ...[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.store_outlined, size: 15, color: Color(0xFF6B7280)),
+                    const SizedBox(width: 6),
+                    Expanded(child: Text(cot['taller_nombre'] as String,
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.text))),
+                    if (cot['taller_rating'] != null)
+                      Text(
+                        '${'★' * ((cot['taller_rating'] as num).round())}${'☆' * (5 - (cot['taller_rating'] as num).round())} ${(cot['taller_rating'] as num).toStringAsFixed(1)}',
+                        style: const TextStyle(fontSize: 12, color: Color(0xFFF59E0B)),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+              ],
+
+              // Tiempo estimado reparación
+              if (cot['tiempo_estimado_horas'] != null) ...[
+                _InfoRow(
+                  icon: Icons.build_outlined,
+                  label: 'Tiempo estimado de reparación: ${cot['tiempo_estimado_horas']}h',
+                ),
+              ],
+
               // Incidente
               if (cot['incidente_id'] != null)
                 _InfoRow(icon: Icons.warning_amber_outlined, label: 'Incidente #${cot['incidente_id']}'),

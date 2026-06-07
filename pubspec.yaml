@@ -47,6 +47,9 @@ dependencies:
   flutter_local_notifications: ^17.2.2
   web_socket_channel: ^3.0.1
   flutter_stripe: ^11.0.0
+  pdf: ^3.11.0
+  flutter_localizations:
+    sdk: flutter
 
 dev_dependencies:
   flutter_test:

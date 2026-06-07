@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:taller_movil/core/theme/app_colors.dart';
 import 'package:taller_movil/services/auth_service.dart';
 // ignore: unused_import
@@ -61,6 +62,8 @@ import 'package:taller_movil/features/reportes/recordatorios_mantenimiento/recor
 import 'package:taller_movil/features/reportes/metricas_taller/metricas_taller_page.dart';
 import 'package:taller_movil/features/reportes/metricas_globales/metricas_globales_page.dart';
 import 'package:taller_movil/features/reportes/auditoria/auditoria_page.dart';
+import 'package:taller_movil/features/reportes/ranking_talleres/ranking_talleres_page.dart';
+import 'package:taller_movil/features/reportes/mis_reportes/mis_reportes_page.dart';
 
 import 'dart:async';
 import 'package:flutter_stripe/flutter_stripe.dart';
@@ -172,6 +175,13 @@ class _RutaSeguraState extends State<RutaSegura> {
       title: 'RutaSegura',
       navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [Locale('es'), Locale('en')],
+      locale: const Locale('es'),
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: AppColors.primary),
         fontFamily: 'Inter',
@@ -239,6 +249,8 @@ class _RutaSeguraState extends State<RutaSegura> {
         '/reportes/metricas-taller':    (_) => const MetricasTallerPage(),
         '/reportes/metricas-globales':  (_) => const MetricasGlobalesPage(),
         '/reportes/auditoria':          (_) => const AuditoriaPage(),
+        '/reportes/ranking-talleres':   (_) => const RankingTalleresPage(),
+        '/reportes/mis-reportes':       (_) => const MisReportesPage(),
       },
     );
   }

@@ -5,6 +5,7 @@ import 'package:taller_movil/core/theme/app_colors.dart';
 import 'package:taller_movil/services/emergencia_service.dart';
 import 'package:taller_movil/services/taller_service.dart';
 import 'package:taller_movil/services/api_helper.dart';
+import 'package:taller_movil/services/solicitud_candidatos_service.dart';
 
 /// CU10 – Ver estado de solicitud (mis incidentes, taller, ETA, actualización periódica).
 class VerEstadoSolicitudPage extends StatefulWidget {
@@ -17,7 +18,9 @@ class VerEstadoSolicitudPage extends StatefulWidget {
 class _VerEstadoSolicitudPageState extends State<VerEstadoSolicitudPage> {
   final _svc = EmergenciaService();
   final _tallerSvc = TallerService();
+  final _candidatosSvc = SolicitudCandidatosService();
   List<Map<String, dynamic>> _items = [];
+  Map<int, List<Map<String, dynamic>>> _candidatos = {};
   bool _loading = true;
   String _error = '';
   Timer? _poll;
@@ -48,6 +51,16 @@ class _VerEstadoSolicitudPageState extends State<VerEstadoSolicitudPage> {
         _loading = false;
         _error = '';
       });
+      // CU39: cargar candidatos para incidentes pendientes
+      for (final row in data) {
+        final inc = row['incidente'] as Map<String, dynamic>? ?? {};
+        final incId = inc['id'] as int?;
+        if (incId != null && inc['estado'] == 'pendiente' && !_candidatos.containsKey(incId)) {
+          _candidatosSvc.listar(incId).then((cands) {
+            if (mounted) setState(() => _candidatos[incId] = cands);
+          }).catchError((_) {});
+        }
+      }
     } catch (e) {
       if (!mounted) return;
       if (e is TokenExpiradoException) {
@@ -224,14 +237,55 @@ class _VerEstadoSolicitudPageState extends State<VerEstadoSolicitudPage> {
                                       ),
                                     ),
                                   ],
-                                ] else
+                                ] else ...[
                                   const Padding(
                                     padding: EdgeInsets.only(top: 6),
                                     child: Text(
-                                      'Aún no hay taller asignado.',
+                                      'Aún no hay taller asignado. Talleres notificados:',
                                       style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
                                     ),
                                   ),
+                                  // CU39 — Talleres candidatos
+                                  if (_candidatos[id]?.isNotEmpty == true) ...[
+                                    const SizedBox(height: 8),
+                                    ...(_candidatos[id]!.map((t) => Container(
+                                      margin: const EdgeInsets.only(bottom: 6),
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF9FAFB),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Expanded(child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(t['nombre'] as String? ?? '',
+                                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                              Text(
+                                                '${'★' * ((t['rating'] as num? ?? 0).round())}${'☆' * (5 - (t['rating'] as num? ?? 0).round())} ${(t['rating'] as num? ?? 0).toStringAsFixed(1)}',
+                                                style: const TextStyle(fontSize: 12, color: Color(0xFFF59E0B)),
+                                              ),
+                                            ],
+                                          )),
+                                          Column(
+                                            crossAxisAlignment: CrossAxisAlignment.end,
+                                            children: [
+                                              if (t['distancia_km'] != null)
+                                                Text('${t['distancia_km']} km',
+                                                    style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
+                                              if (t['eta_min'] != null)
+                                                Text('~${t['eta_min']} min',
+                                                    style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ))),
+                                  ],
+                                ],
                                 if ((inc['descripcion'] as String?)?.isNotEmpty == true) ...[
                                   const SizedBox(height: 8),
                                   Text(
